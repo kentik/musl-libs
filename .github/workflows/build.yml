@@ -1,0 +1,63 @@
+name: build
+
+on:
+  push:
+    branches: "*"
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        target:
+          - aarch64-linux-musl
+          - armv7-linux-musleabihf
+          - x86_64-linux-musl
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          submodules: true
+      - uses: ./.github/actions/setup-xcc
+        with:
+          target:  ${{ matrix.target }}
+          version: f9cb5162
+      - name: build libpcap
+        run: |
+          ./configure --build=$BUILD --host=$HOST --with-pcap=linux --disable-shared
+          make
+          mv libpcap.a libpcap-$HOST.a
+        env:
+          BUILD: x86_64-pc-linux-gnu
+          HOST:  ${{ matrix.target }}
+        working-directory: libpcap
+      - uses: actions/upload-artifact@v3
+        with:
+          name: libpcap-${{ matrix.target }}.a
+          path: libpcap/libpcap-${{ matrix.target }}.a
+
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+      - uses: actions/github-script@v6
+        with:
+          script: |
+            const version = context.sha.substring(0, 8);
+
+            github.rest.git.createRef({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              ref:   `refs/tags/${version}`,
+              sha:   context.sha
+            });
+
+            core.setOutput('version', version);
+        id: create-tag
+      - uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.create-tag.outputs.version }}
+          files: artifacts/**/*
+    needs: build
