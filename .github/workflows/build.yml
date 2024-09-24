@@ -24,6 +24,7 @@ jobs:
           version: f9cb5162
       - name: build libpcap
         run: |
+          autoreconf -f
           ./configure --build=$BUILD --host=$HOST --with-pcap=linux --disable-shared
           make
           mv libpcap.a libpcap-$HOST.a
